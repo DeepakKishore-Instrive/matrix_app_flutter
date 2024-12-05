@@ -11,199 +11,289 @@ class RoomPage extends StatefulWidget {
 }
 
 class _RoomPageState extends State<RoomPage> {
-  late final Future<Timeline> _timelineFuture;
-  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+  Timeline? _timeline;
   final TextEditingController _sendController = TextEditingController();
-  int _count = 0;
+  Event? _replyingToEvent;
 
   @override
   void initState() {
     super.initState();
-    _timelineFuture = widget.room.getTimeline(
-      onChange: (_) {
-        // No explicit state refresh needed as AnimatedList handles changes
-        print('on change!');
-      },
-      onInsert: (index) {
-        print('on insert! $index');
-        _listKey.currentState?.insertItem(index);
-        _count++;
-      },
-      onRemove: (index) {
-        print('On remove $index');
-        _listKey.currentState?.removeItem(index, (context, animation) {
-          return const ListTile();
-        });
-        _count--;
-      },
-      onUpdate: () => print('On update'),
-    );
+    _loadTimeline();
   }
 
-  void _sendMessage() {
-    final message = _sendController.text.trim();
-    if (message.isNotEmpty) {
-      widget.room.sendTextEvent(message);
-      _sendController.clear();
+  Future<void> _loadTimeline() async {
+    try {
+      _timeline = await widget.room.getTimeline(
+        onUpdate: () {
+          if (mounted) setState(() {});
+        },
+      );
+      if (mounted) setState(() {});
+    } catch (e) {
+      print('Error loading timeline: $e');
     }
   }
 
-  Widget _buildTimeline(Timeline timeline) {
-    _count = timeline.events.length;
-    final client = Provider.of<Client>(context, listen: false);
+ Future<void> _sendMessage() async {
+  final message = _sendController.text.trim();
+  if (message.isEmpty) return;
 
-    return Column(
-      children: [
-        Center(
-          child: TextButton(
-            onPressed: timeline.requestHistory,
-            child: const Text('Load more...'),
-          ),
+  try {
+    String txnId = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    if (_replyingToEvent != null) {
+      // Send a reply
+      await widget.room.client.sendMessage(
+        widget.room.id, 
+        'm.room.message', 
+        txnId,
+        {
+          'body': message,
+          'msgtype': 'm.text',
+          'm.relates_to': {
+            'rel_type': 'm.in_reply_to',
+            'event_id': _replyingToEvent!.eventId,
+          }
+        }
+      );
+      
+      // Reset reply state
+      setState(() {
+        _replyingToEvent = null;
+      });
+    } else {
+      // Send a regular message
+      await widget.room.client.sendMessage(
+        widget.room.id, 
+        'm.room.message', 
+        txnId,
+        {
+          'body': message,
+          'msgtype': 'm.text',
+        }
+      );
+    }
+    _sendController.clear();
+  } catch (e) {
+    print('Error sending message: $e');
+  }
+}
+
+  void _startReply(Event event) {
+    setState(() {
+      _replyingToEvent = event;
+    });
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToEvent = null;
+    });
+  }
+
+  Widget _buildMessageBubble(Event event, bool ownMessage) {
+    final theme = Theme.of(context);
+
+    return GestureDetector(
+      onLongPress: () => _startReply(event),
+      child: Align(
+        alignment: ownMessage ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment: 
+              ownMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            // Reply context if this message is a reply
+            if (event.relationshipType == RelationshipTypes.reply)
+              FutureBuilder<Event?>(
+                future: event.getReplyEvent(_timeline!),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: ReplyContent(
+                        snapshot.data!, 
+                        ownMessage: ownMessage,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: ownMessage 
+                  ? theme.colorScheme.primaryContainer 
+                  : theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: ownMessage ? const Radius.circular(16) : Radius.zero,
+                  bottomRight: ownMessage ? Radius.zero : const Radius.circular(16),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!ownMessage)
+                    Text(
+                      event.senderFromMemoryOrFallback.calcDisplayname(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.secondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  Text(
+                    event.plaintextBody,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: ownMessage 
+                        ? theme.colorScheme.onPrimaryContainer 
+                        : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    event.originServerTs.toIso8601String().substring(11, 16), // HH:MM
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const Divider(height: 1),
-        Expanded(
-          child: AnimatedList(
-            key: _listKey,
-            reverse: true,
-            initialItemCount: timeline.events.length,
-            itemBuilder: (context, index, animation) {
-              final event = timeline.events[index];
-              bool ownMessage = event.senderId == client.userID;
-              // if (event.relationshipEventId != null) return Container();
-              return Align(
-                alignment:
-                    ownMessage ? Alignment.centerRight : Alignment.centerLeft,
-                child: SizedBox(
-                  width: MediaQuery.sizeOf(context).width * 0.8,
-                  child: Column(
-                    children: [
-                      if (event.relationshipType == RelationshipTypes.reply)
-                        FutureBuilder<Event?>(
-                          future: event.getReplyEvent(timeline),
-                          builder: (
-                            BuildContext context,
-                            snapshot,
-                          ) {
-                            final replyEvent = snapshot.hasData
-                                ? snapshot.data!
-                                : Event(
-                                    eventId: event.relationshipEventId!,
-                                    content: {
-                                      'msgtype': 'm.text',
-                                      'body': '...',
-                                    },
-                                    senderId: event.senderId,
-                                    type: 'm.room.message',
-                                    room: event.room,
-                                    status: EventStatus.sent,
-                                    originServerTs: DateTime.now(),
-                                  );
-                            return Padding(
-                              padding: const EdgeInsets.only(
-                                bottom: 4.0,
-                              ),
-                              child: AbsorbPointer(
-                                child: ReplyContent(
-                                  replyEvent,
-                                  ownMessage: ownMessage,
-                                  timeline: timeline,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      if (event.type == EventTypes.Message)
-                        ScaleTransition(
-                          scale: animation,
-                          child: Opacity(
-                            opacity: event.status.isSent ? 1 : 0.5,
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                foregroundImage: event
-                                            .senderFromMemoryOrFallback
-                                            .avatarUrl ==
-                                        null
-                                    ? null
-                                    : NetworkImage(
-                                        event.senderFromMemoryOrFallback
-                                            .avatarUrl!
-                                            .getThumbnailUri(widget.room.client,
-                                                width: 56, height: 56)
-                                            .toString(),
-                                      ),
-                              ),
-                              title: Row(
-                                children: [
-                                  ownMessage
-                                      ? const SizedBox()
-                                      : Expanded(
-                                          child: Text(
-                                            event.senderFromMemoryOrFallback
-                                                .calcDisplayname(),
-                                          ),
-                                        ),
-                                  Text(
-                                    event.originServerTs.toIso8601String(),
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                              subtitle: Text(
-                                  "${event.plaintextBody} | ${event.hashCode}"),
-                            ),
-                          ),
-                        )
-                    ],
+      ),
+    );
+  }
+
+  Widget _buildReplyPreview() {
+    if (_replyingToEvent == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      color: Colors.grey[100],
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Replying to ${_replyingToEvent!.senderFromMemoryOrFallback.calcDisplayname()}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
                   ),
                 ),
-              );
-
-              // return SizedBox();
-            },
+                Text(
+                  _replyingToEvent!.plaintextBody,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: _cancelReply,
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.room.getLocalizedDisplayname()),
+        title: Text(
+          widget.room.getLocalizedDisplayname(),
+          style: theme.textTheme.titleMedium,
+        ),
+        backgroundColor: theme.colorScheme.surface,
+        elevation: 1,
       ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
-              child: FutureBuilder<Timeline>(
-                future: _timelineFuture,
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator.adaptive(),
-                    );
-                  }
-                  return _buildTimeline(snapshot.data!);
-                },
-              ),
+              child: _timeline == null
+                  ? const Center(child: CircularProgressIndicator.adaptive())
+                  : ListView.builder(
+                      reverse: true,
+                      itemCount: _timeline!.events.length,
+                      itemBuilder: (context, index) {
+                        final event = _timeline!.events[index];
+                        
+                        // Filter out non-message events
+                        if (event.type != EventTypes.Message) return const SizedBox.shrink();
+
+                        return _buildMessageBubble(
+                          event, 
+                          event.senderId == widget.room.client.userID
+                        );
+                      },
+                    ),
             ),
+            // Reply preview widget
+            _buildReplyPreview(),
             const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
               child: Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: _sendController,
-                      decoration: const InputDecoration(
-                        hintText: 'Send message',
+                      decoration: InputDecoration(
+                        hintText: _replyingToEvent != null 
+                          ? 'Reply to message' 
+                          : 'Send message',
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerLowest,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, 
+                          vertical: 12
+                        ),
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send_outlined),
-                    onPressed: _sendMessage,
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: theme.colorScheme.primary,
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.send_outlined, 
+                        color: theme.colorScheme.onPrimary
+                      ),
+                      onPressed: _sendMessage,
+                    ),
                   ),
                 ],
               ),
@@ -218,30 +308,19 @@ class _RoomPageState extends State<RoomPage> {
 class ReplyContent extends StatelessWidget {
   final Event replyEvent;
   final bool ownMessage;
-  final Timeline? timeline;
   final Color? backgroundColor;
 
   const ReplyContent(
     this.replyEvent, {
     this.ownMessage = false,
     super.key,
-    this.timeline,
     this.backgroundColor,
   });
-
-  static const BorderRadius borderRadius = BorderRadius.only(
-    topRight: Radius.circular(8),
-    bottomRight: Radius.circular(8),
-  );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final timeline = this.timeline;
-    final displayEvent =
-        timeline != null ? replyEvent.getDisplayEvent(timeline) : replyEvent;
-    final fontSize = 18.0;
     final color = ownMessage
         ? theme.colorScheme.tertiaryContainer
         : theme.colorScheme.tertiary;
@@ -249,13 +328,16 @@ class ReplyContent extends StatelessWidget {
     return Material(
       color: backgroundColor ??
           theme.colorScheme.surface.withOpacity(ownMessage ? 0.2 : 0.33),
-      borderRadius: borderRadius,
+      borderRadius: const BorderRadius.only(
+        topRight: Radius.circular(8),
+        bottomRight: Radius.circular(8),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Container(
             width: 3,
-            height: fontSize * 2 + 16,
+            height: 40,
             color: color,
           ),
           const SizedBox(width: 6),
@@ -264,31 +346,25 @@ class ReplyContent extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                FutureBuilder<User?>(
-                  initialData: displayEvent.senderFromMemoryOrFallback,
-                  future: displayEvent.fetchSenderUser(),
-                  builder: (context, snapshot) {
-                    return Text(
-                      '${snapshot.data?.calcDisplayname() ?? displayEvent.senderFromMemoryOrFallback.calcDisplayname()}:',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                        fontSize: fontSize,
-                      ),
-                    );
-                  },
+                Text(
+                  replyEvent.senderFromMemoryOrFallback.calcDisplayname(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                    fontSize: 14,
+                  ),
                 ),
                 Text(
-                  displayEvent.text,
+                  replyEvent.plaintextBody,
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                   style: TextStyle(
                     color: ownMessage
                         ? theme.colorScheme.onTertiary
                         : theme.colorScheme.onSurface,
-                    fontSize: fontSize,
+                    fontSize: 14,
                   ),
                 ),
               ],
