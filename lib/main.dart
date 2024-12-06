@@ -32,6 +32,7 @@ class MatrixExampleChat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Matrix Example Chat',
       builder: (context, child) => Provider<Client>(
         create: (context) => client,

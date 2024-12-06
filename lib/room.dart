@@ -286,6 +286,12 @@ class _RoomPageState extends State<RoomPage> {
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _timeline?.setReadMarker(); // set marker read
+    super.dispose();
+  }
 }
 
 class ReplyContent extends StatelessWidget {
