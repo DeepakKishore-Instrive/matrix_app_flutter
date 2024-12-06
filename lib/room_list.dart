@@ -46,21 +46,17 @@ class _RoomListPageState extends State<RoomListPage> {
     }
   }
 
-  Future<void> _createDirectChat(String userId) async {
+  Future<void> _createDirectChat(String userId, String userName) async {
     try {
       setState(() => _isLoading = true);
       final client = Provider.of<Client>(context, listen: false);
       String roomId = await client.createRoom(
-        isDirect: true, 
-        invite: [userId],
-        name: 'Direct Chat with $userId'
-      );
-      
+          isDirect: true, invite: [userId], name: 'DM $userName($userId)');
+
       _searchController.clear();
       _searchData = null;
       setState(() => _isLoading = false);
 
-      // Immediately navigate to the new room
       Room? newRoom = client.getRoomById(roomId);
       if (newRoom != null) {
         Navigator.of(context).push(
@@ -84,7 +80,7 @@ class _RoomListPageState extends State<RoomListPage> {
 
       final client = Provider.of<Client>(context, listen: false);
       _searchData = await client.searchUserDirectory(_searchController.text);
-      
+
       setState(() {
         _isSearching = false;
         _isLoading = false;
@@ -121,14 +117,14 @@ class _RoomListPageState extends State<RoomListPage> {
           hintText: 'Search users...',
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchController.text.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() => _searchData = null);
-                },
-              )
-            : null,
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchData = null);
+                  },
+                )
+              : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -145,16 +141,19 @@ class _RoomListPageState extends State<RoomListPage> {
       itemBuilder: (context, i) => ListTile(
         leading: CircleAvatar(
           foregroundImage: rooms[i].avatar == null
-            ? null
-            : NetworkImage(rooms[i].avatar!.getThumbnailUri(
-                Provider.of<Client>(context, listen: false),
-                width: 56,
-                height: 56,
-              ).toString()),
+              ? null
+              : NetworkImage(rooms[i]
+                  .avatar!
+                  .getThumbnailUri(
+                    Provider.of<Client>(context, listen: false),
+                    width: 56,
+                    height: 56,
+                  )
+                  .toString()),
           backgroundColor: Colors.grey[300],
-          child: rooms[i].avatar == null 
-            ? Icon(Icons.person, color: Colors.grey[600]) 
-            : null,
+          child: rooms[i].avatar == null
+              ? Icon(Icons.person, color: Colors.grey[600])
+              : null,
         ),
         title: Row(
           children: [
@@ -174,7 +173,7 @@ class _RoomListPageState extends State<RoomListPage> {
                 child: Text(
                   rooms[i].notificationCount.toString(),
                   style: const TextStyle(
-                    color: Colors.white, 
+                    color: Colors.white,
                     fontSize: 12,
                   ),
                 ),
@@ -213,17 +212,17 @@ class _RoomListPageState extends State<RoomListPage> {
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           elevation: 2,
           child: ListTile(
-            onTap: () => _createDirectChat(profile.userId),
+            onTap: () => _createDirectChat(
+                profile.userId, profile.displayName ?? profile.userId),
             leading: profile.avatarUrl != null
-              ? CircleAvatar(
-                  backgroundImage: CachedNetworkImageProvider(
-                    _convertMxcToHttp(profile.avatarUrl.toString())
+                ? CircleAvatar(
+                    backgroundImage: CachedNetworkImageProvider(
+                        _convertMxcToHttp(profile.avatarUrl.toString())),
+                  )
+                : CircleAvatar(
+                    backgroundColor: Colors.grey[300],
+                    child: Icon(Icons.person, color: Colors.grey[600]),
                   ),
-                )
-              : CircleAvatar(
-                  backgroundColor: Colors.grey[300],
-                  child: Icon(Icons.person, color: Colors.grey[600]),
-                ),
             title: Text(
               profile.displayName ?? profile.userId,
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -256,11 +255,11 @@ class _RoomListPageState extends State<RoomListPage> {
           _buildSearchField(),
           Expanded(
             child: _searchController.text.isNotEmpty
-              ? _buildSearchResults()
-              : StreamBuilder(
-                  stream: client.onSync.stream,
-                  builder: (context, _) => _buildRoomList(client.rooms),
-                ),
+                ? _buildSearchResults()
+                : StreamBuilder(
+                    stream: client.onSync.stream,
+                    builder: (context, _) => _buildRoomList(client.rooms),
+                  ),
           ),
         ],
       ),

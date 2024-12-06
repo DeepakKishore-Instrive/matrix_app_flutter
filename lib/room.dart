@@ -34,50 +34,39 @@ class _RoomPageState extends State<RoomPage> {
     }
   }
 
- Future<void> _sendMessage() async {
-  final message = _sendController.text.trim();
-  if (message.isEmpty) return;
+  Future<void> _sendMessage() async {
+    final message = _sendController.text.trim();
+    if (message.isEmpty) return;
 
-  try {
-    String txnId = DateTime.now().millisecondsSinceEpoch.toString();
-    
-    if (_replyingToEvent != null) {
-      // Send a reply
-      await widget.room.client.sendMessage(
-        widget.room.id, 
-        'm.room.message', 
-        txnId,
-        {
+    try {
+      String txnId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      if (_replyingToEvent != null) {
+        await widget.room.client
+            .sendMessage(widget.room.id, 'm.room.message', txnId, {
           'body': message,
           'msgtype': 'm.text',
           'm.relates_to': {
             'rel_type': 'm.in_reply_to',
             'event_id': _replyingToEvent!.eventId,
           }
-        }
-      );
-      
-      // Reset reply state
-      setState(() {
-        _replyingToEvent = null;
-      });
-    } else {
-      // Send a regular message
-      await widget.room.client.sendMessage(
-        widget.room.id, 
-        'm.room.message', 
-        txnId,
-        {
+        });
+
+        setState(() {
+          _replyingToEvent = null;
+        });
+      } else {
+        await widget.room.client
+            .sendMessage(widget.room.id, 'm.room.message', txnId, {
           'body': message,
           'msgtype': 'm.text',
-        }
-      );
+        });
+      }
+      _sendController.clear();
+    } catch (e) {
+      print('Error sending message: $e');
     }
-    _sendController.clear();
-  } catch (e) {
-    print('Error sending message: $e');
   }
-}
 
   void _startReply(Event event) {
     setState(() {
@@ -99,10 +88,9 @@ class _RoomPageState extends State<RoomPage> {
       child: Align(
         alignment: ownMessage ? Alignment.centerRight : Alignment.centerLeft,
         child: Column(
-          crossAxisAlignment: 
+          crossAxisAlignment:
               ownMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            // Reply context if this message is a reply
             if (event.relationshipType == RelationshipTypes.reply)
               FutureBuilder<Event?>(
                 future: event.getReplyEvent(_timeline!),
@@ -111,7 +99,7 @@ class _RoomPageState extends State<RoomPage> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 4.0),
                       child: ReplyContent(
-                        snapshot.data!, 
+                        snapshot.data!,
                         ownMessage: ownMessage,
                       ),
                     );
@@ -123,14 +111,16 @@ class _RoomPageState extends State<RoomPage> {
               margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: ownMessage 
-                  ? theme.colorScheme.primaryContainer 
-                  : theme.colorScheme.surfaceContainerHighest,
+                color: ownMessage
+                    ? theme.colorScheme.primaryContainer
+                    : theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
-                  bottomLeft: ownMessage ? const Radius.circular(16) : Radius.zero,
-                  bottomRight: ownMessage ? Radius.zero : const Radius.circular(16),
+                  bottomLeft:
+                      ownMessage ? const Radius.circular(16) : Radius.zero,
+                  bottomRight:
+                      ownMessage ? Radius.zero : const Radius.circular(16),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -154,14 +144,14 @@ class _RoomPageState extends State<RoomPage> {
                   Text(
                     event.plaintextBody,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: ownMessage 
-                        ? theme.colorScheme.onPrimaryContainer 
-                        : theme.colorScheme.onSurface,
+                      color: ownMessage
+                          ? theme.colorScheme.onPrimaryContainer
+                          : theme.colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    event.originServerTs.toIso8601String().substring(11, 16), // HH:MM
+                    event.originServerTs.toIso8601String().substring(11, 16),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
                       fontSize: 10,
@@ -236,18 +226,15 @@ class _RoomPageState extends State<RoomPage> {
                       itemCount: _timeline!.events.length,
                       itemBuilder: (context, index) {
                         final event = _timeline!.events[index];
-                        
-                        // Filter out non-message events
-                        if (event.type != EventTypes.Message) return const SizedBox.shrink();
+
+                        if (event.type != EventTypes.Message)
+                          return const SizedBox.shrink();
 
                         return _buildMessageBubble(
-                          event, 
-                          event.senderId == widget.room.client.userID
-                        );
+                            event, event.senderId == widget.room.client.userID);
                       },
                     ),
             ),
-            // Reply preview widget
             _buildReplyPreview(),
             const Divider(height: 1),
             Container(
@@ -268,9 +255,9 @@ class _RoomPageState extends State<RoomPage> {
                     child: TextField(
                       controller: _sendController,
                       decoration: InputDecoration(
-                        hintText: _replyingToEvent != null 
-                          ? 'Reply to message' 
-                          : 'Send message',
+                        hintText: _replyingToEvent != null
+                            ? 'Reply to message'
+                            : 'Send message',
                         filled: true,
                         fillColor: theme.colorScheme.surfaceContainerLowest,
                         border: OutlineInputBorder(
@@ -278,9 +265,7 @@ class _RoomPageState extends State<RoomPage> {
                           borderSide: BorderSide.none,
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, 
-                          vertical: 12
-                        ),
+                            horizontal: 16, vertical: 12),
                       ),
                     ),
                   ),
@@ -288,10 +273,8 @@ class _RoomPageState extends State<RoomPage> {
                   CircleAvatar(
                     backgroundColor: theme.colorScheme.primary,
                     child: IconButton(
-                      icon: Icon(
-                        Icons.send_outlined, 
-                        color: theme.colorScheme.onPrimary
-                      ),
+                      icon: Icon(Icons.send_outlined,
+                          color: theme.colorScheme.onPrimary),
                       onPressed: _sendMessage,
                     ),
                   ),
@@ -361,9 +344,7 @@ class ReplyContent extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                   style: TextStyle(
-                    color: ownMessage
-                        ? theme.colorScheme.onTertiary
-                        : theme.colorScheme.onSurface,
+                    color: Colors.black,
                     fontSize: 14,
                   ),
                 ),
