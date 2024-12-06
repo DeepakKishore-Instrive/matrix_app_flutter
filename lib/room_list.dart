@@ -3,6 +3,7 @@ import 'package:flutter_application_2/login.dart';
 import 'package:flutter_application_2/room.dart';
 import 'package:matrix/matrix.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class RoomListPage extends StatefulWidget {
   const RoomListPage({super.key});
@@ -12,49 +13,227 @@ class RoomListPage extends StatefulWidget {
 }
 
 class _RoomListPageState extends State<RoomListPage> {
-  TextEditingController searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+  SearchUserDirectoryResponse? _searchData;
+  bool _isSearching = false;
+  bool _isLoading = false;
+
   void _logout() async {
-    final client = Provider.of<Client>(context, listen: false);
-    await client.logout();
-    // client.searchUserDirectory(searchTerm)
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
+    try {
+      final client = Provider.of<Client>(context, listen: false);
+      await client.logout();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+    } catch (e) {
+      _showErrorSnackBar('Logout failed: ${e.toString()}');
+    }
   }
 
   void _join(Room room) async {
-    if (room.membership != Membership.join) {
-      await room.join();
+    try {
+      if (room.membership != Membership.join) {
+        await room.join();
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RoomPage(room: room),
+        ),
+      );
+    } catch (e) {
+      _showErrorSnackBar('Could not join room: ${e.toString()}');
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RoomPage(room: room),
+  }
+
+  Future<void> _createDirectChat(String userId) async {
+    try {
+      setState(() => _isLoading = true);
+      final client = Provider.of<Client>(context, listen: false);
+      String roomId = await client.createRoom(
+        isDirect: true, 
+        invite: [userId],
+        name: 'Direct Chat with $userId'
+      );
+      
+      _searchController.clear();
+      _searchData = null;
+      setState(() => _isLoading = false);
+
+      // Immediately navigate to the new room
+      Room? newRoom = client.getRoomById(roomId);
+      if (newRoom != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => RoomPage(room: newRoom)),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorSnackBar('Could not create room: ${e.toString()}');
+    }
+  }
+
+  Future<void> _searchUsers() async {
+    if (_searchController.text.isEmpty) return;
+
+    try {
+      setState(() {
+        _isSearching = true;
+        _isLoading = true;
+      });
+
+      final client = Provider.of<Client>(context, listen: false);
+      _searchData = await client.searchUserDirectory(_searchController.text);
+      
+      setState(() {
+        _isSearching = false;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isSearching = false;
+        _isLoading = false;
+      });
+      _showErrorSnackBar('Search failed: ${e.toString()}');
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
       ),
     );
   }
 
-  Future<void> _createRoom(String userId) async {
-    final client = Provider.of<Client>(context, listen: false);
-    String roomId = await client.createRoom(isDirect: true, invite: [
-      userId,
-    ]);
-    print(roomId);
-    searchController.clear();
-    setState(() {});
-    // client.
+  String _convertMxcToHttp(String? mxcUrl) {
+    if (mxcUrl == null || !mxcUrl.startsWith('mxc://')) return '';
+    return 'https://matrix.org/_matrix/media/v3/download/${mxcUrl.substring(6)}';
   }
 
-  SearchUserDirectoryResponse? searchData;
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search users...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchController.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _searchData = null);
+                },
+              )
+            : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onSubmitted: (_) => _searchUsers(),
+      ),
+    );
+  }
 
-  String convertMxcToHttp(
-    String mxcUrl,
-  ) {
-    if (mxcUrl.startsWith('mxc://')) {
-      // final parts = mxcUrl.substring(6).split('/');
-      return 'https://matrix.org/_matrix/media/v3/download/${mxcUrl.substring(6)}'; //"mxc://matrix.org/VkqEVTPEcYhKeQaoXLehYvoE"
+  Widget _buildRoomList(List<Room> rooms) {
+    return ListView.separated(
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemCount: rooms.length,
+      itemBuilder: (context, i) => ListTile(
+        leading: CircleAvatar(
+          foregroundImage: rooms[i].avatar == null
+            ? null
+            : NetworkImage(rooms[i].avatar!.getThumbnailUri(
+                Provider.of<Client>(context, listen: false),
+                width: 56,
+                height: 56,
+              ).toString()),
+          backgroundColor: Colors.grey[300],
+          child: rooms[i].avatar == null 
+            ? Icon(Icons.person, color: Colors.grey[600]) 
+            : null,
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                rooms[i].getLocalizedDisplayname(),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (rooms[i].notificationCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  rooms[i].notificationCount.toString(),
+                  style: const TextStyle(
+                    color: Colors.white, 
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        subtitle: Text(
+          rooms[i].lastEvent?.body ?? 'No messages',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: () => _join(rooms[i]),
+      ),
+    );
+  }
+
+  Widget _buildSearchResults() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
     }
-    return "";
+
+    if (_searchData == null || _searchData!.results.isEmpty) {
+      return const Center(
+        child: Text(
+          'No users found',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _searchData?.results.length,
+      itemBuilder: (context, index) {
+        final profile = _searchData!.results[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          elevation: 2,
+          child: ListTile(
+            onTap: () => _createDirectChat(profile.userId),
+            leading: profile.avatarUrl != null
+              ? CircleAvatar(
+                  backgroundImage: CachedNetworkImageProvider(
+                    _convertMxcToHttp(profile.avatarUrl.toString())
+                  ),
+                )
+              : CircleAvatar(
+                  backgroundColor: Colors.grey[300],
+                  child: Icon(Icons.person, color: Colors.grey[600]),
+                ),
+            title: Text(
+              profile.displayName ?? profile.userId,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(profile.userId),
+            trailing: const Icon(Icons.chat_bubble_outline),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -63,96 +242,25 @@ class _RoomListPageState extends State<RoomListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chats'),
+        title: const Text('Matrix Chats'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
             onPressed: _logout,
           ),
         ],
       ),
       body: Column(
         children: [
-          TextField(
-            controller: searchController,
-            decoration: InputDecoration(
-                suffixIcon: IconButton(
-                    onPressed: () async {
-                      Future.value([]);
-                      searchData = await client
-                          .searchUserDirectory(searchController.text);
-                      setState(() {});
-                      print(searchData);
-                    },
-                    icon: Icon(Icons.search))),
-          ),
+          _buildSearchField(),
           Expanded(
-            child: searchController.text.isNotEmpty
-                ? searchData != null && searchData!.results.isNotEmpty
-                    ? ListView.builder(
-                        itemCount: searchData?.results.length,
-                        itemBuilder: (context, index) {
-                          List<Profile> profile = searchData?.results ?? [];
-                          return Card(
-                            child: ListTile(
-                                onTap: () {
-                                  _createRoom(profile[index].userId);
-                                },
-                                leading:profile[index].avatarUrl !=
-                                          null? CircleAvatar(
-                                  backgroundImage:NetworkImage(convertMxcToHttp(
-                                          profile[index].avatarUrl.toString()))
-                                      
-                                ): null,
-                                title: Text(
-                                    "${profile[index].displayName} | ${profile[index].userId}")),
-                          );
-                        },
-                      )
-                    : SizedBox(
-                        child: Text("No Data"),
-                      )
-                : StreamBuilder(
-                    stream: client.onSync.stream,
-                    builder: (context, _) => ListView.builder(
-                      itemCount: client.rooms.length,
-                      itemBuilder: (context, i) => ListTile(
-                        leading: CircleAvatar(
-                          foregroundImage: client.rooms[i].avatar == null
-                              ? null
-                              : NetworkImage(client.rooms[i].avatar!
-                                  .getThumbnailUri(
-                                    client,
-                                    width: 56,
-                                    height: 56,
-                                  )
-                                  .toString()),
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                                child: Text(
-                                    client.rooms[i].getLocalizedDisplayname())),
-                            if (client.rooms[i].notificationCount > 0)
-                              Material(
-                                  borderRadius: BorderRadius.circular(99),
-                                  color: Colors.red,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(2.0),
-                                    child: Text(client
-                                        .rooms[i].notificationCount
-                                        .toString()),
-                                  ))
-                          ],
-                        ),
-                        subtitle: Text(
-                          client.rooms[i].lastEvent?.body ?? 'No messages',
-                          maxLines: 1,
-                        ),
-                        onTap: () => _join(client.rooms[i]),
-                      ),
-                    ),
-                  ),
+            child: _searchController.text.isNotEmpty
+              ? _buildSearchResults()
+              : StreamBuilder(
+                  stream: client.onSync.stream,
+                  builder: (context, _) => _buildRoomList(client.rooms),
+                ),
           ),
         ],
       ),
