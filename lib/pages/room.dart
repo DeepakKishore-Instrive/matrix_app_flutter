@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_2/pages/room_details.dart';
 import 'package:flutter_application_2/pages/video_player_screen.dart';
 import 'package:flutter_application_2/widgets/mx_image.dart';
 import 'package:flutter_application_2/widgets/reply_content.dart';
@@ -363,7 +364,13 @@ class _RoomPageState extends State<RoomPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (context) => RoomDetails(
+                  room: widget.room,
+                ),
+              ));
+            },
           ),
         ],
       ),
@@ -481,7 +488,7 @@ class _RoomPageState extends State<RoomPage> {
               _sendFileMessage();
             },
           ),
-          // Add more attachment types as needed
+          
         ],
       ),
     );
@@ -601,8 +608,7 @@ class StateMessage extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.black
-                    ),
+                style: TextStyle(color: Colors.black),
               ),
             ),
           ),
