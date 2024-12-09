@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_2/pages/video_player_screen.dart';
 import 'package:flutter_application_2/widgets/mx_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:matrix/matrix.dart';
@@ -270,39 +271,65 @@ class _RoomPageState extends State<RoomPage> {
   }
 
   Widget _buildVideoMessage(Event event) {
-    return GestureDetector(
-      onTap: () {},
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          FutureBuilder(
-              future:event.downloadAndDecryptAttachment(
-        getThumbnail: true,),
-              builder: (context, AsyncSnapshot<MatrixFile?> asyncData) {
-                if (asyncData.hasData && asyncData.data != null) {
-                  return Image.memory(
-                    asyncData.data!.bytes,
-                    fit: BoxFit.cover,
-                    width: 200,
-                    height: 200,
-                  );
-                }
-                return SizedBox(
-                  height: 250,
-                  width: 250,
-                );
-              }),
-          const CircleAvatar(
-            backgroundColor: Colors.black54,
-            child: Icon(
-              Icons.play_arrow,
-              color: Colors.white,
+  return GestureDetector(
+    onTap: () async {
+      final MatrixFile? matrixFile = await event.downloadAndDecryptAttachment(
+        getThumbnail: false, 
+      );
+
+      if (matrixFile != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => VideoPlayerScreen(
+              videoBytes: matrixFile.bytes,
             ),
           ),
-        ],
-      ),
-    );
-  }
+        );
+      }
+    },
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        // Thumbnail preview
+        FutureBuilder(
+          future: event.downloadAndDecryptAttachment(
+            getThumbnail: true,
+          ),
+          builder: (context, AsyncSnapshot<MatrixFile?> asyncData) {
+            if (asyncData.hasData && asyncData.data != null) {
+              return Image.memory(
+                asyncData.data!.bytes,
+                fit: BoxFit.cover,
+                width: 200,
+                height: 200,
+                errorBuilder: (context, error, stackTrace) {
+                  return const SizedBox(
+                    width: 200,
+                    height: 200,
+                    child: Center(child: Icon(Icons.error)),
+                  );
+                },
+              );
+            }
+            return const SizedBox(
+              height: 250,
+              width: 250,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          },
+        ),
+        // Play button overlay
+        const CircleAvatar(
+          backgroundColor: Colors.black54,
+          child: Icon(
+            Icons.play_arrow,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildStickerMessage(Event event) {
     return Image.network(
