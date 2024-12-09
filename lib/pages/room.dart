@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_2/pages/video_player_screen.dart';
@@ -10,6 +10,7 @@ import 'package:matrix/matrix.dart';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 class RoomPage extends StatefulWidget {
   final Room room;
@@ -23,7 +24,6 @@ class _RoomPageState extends State<RoomPage> {
   Timeline? _timeline;
   final TextEditingController _sendController = TextEditingController();
   Event? _replyingToEvent;
-  bool _isEmojiPickerVisible = false;
 
   @override
   void initState() {
@@ -272,65 +272,65 @@ class _RoomPageState extends State<RoomPage> {
   }
 
   Widget _buildVideoMessage(Event event) {
-  return GestureDetector(
-    onTap: () async {
-      final MatrixFile? matrixFile = await event.downloadAndDecryptAttachment(
-        getThumbnail: false, 
-      );
+    return GestureDetector(
+      onTap: () async {
+        final MatrixFile? matrixFile = await event.downloadAndDecryptAttachment(
+          getThumbnail: false,
+        );
 
-      if (matrixFile != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => VideoPlayerScreen(
-              videoBytes: matrixFile.bytes,
+        if (matrixFile != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => VideoPlayerScreen(
+                videoBytes: matrixFile.bytes,
+              ),
+            ),
+          );
+        }
+      },
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Thumbnail preview
+          FutureBuilder(
+            future: event.downloadAndDecryptAttachment(
+              getThumbnail: true,
+            ),
+            builder: (context, AsyncSnapshot<MatrixFile?> asyncData) {
+              if (asyncData.hasData && asyncData.data != null) {
+                return Image.memory(
+                  asyncData.data!.bytes,
+                  fit: BoxFit.cover,
+                  width: 200,
+                  height: 200,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const SizedBox(
+                      width: 200,
+                      height: 200,
+                      child: Center(child: Icon(Icons.error)),
+                    );
+                  },
+                );
+              }
+              return const SizedBox(
+                height: 250,
+                width: 250,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            },
+          ),
+          // Play button overlay
+          const CircleAvatar(
+            backgroundColor: Colors.black54,
+            child: Icon(
+              Icons.play_arrow,
+              color: Colors.white,
             ),
           ),
-        );
-      }
-    },
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        // Thumbnail preview
-        FutureBuilder(
-          future: event.downloadAndDecryptAttachment(
-            getThumbnail: true,
-          ),
-          builder: (context, AsyncSnapshot<MatrixFile?> asyncData) {
-            if (asyncData.hasData && asyncData.data != null) {
-              return Image.memory(
-                asyncData.data!.bytes,
-                fit: BoxFit.cover,
-                width: 200,
-                height: 200,
-                errorBuilder: (context, error, stackTrace) {
-                  return const SizedBox(
-                    width: 200,
-                    height: 200,
-                    child: Center(child: Icon(Icons.error)),
-                  );
-                },
-              );
-            }
-            return const SizedBox(
-              height: 250,
-              width: 250,
-              child: Center(child: CircularProgressIndicator()),
-            );
-          },
-        ),
-        // Play button overlay
-        const CircleAvatar(
-          backgroundColor: Colors.black54,
-          child: Icon(
-            Icons.play_arrow,
-            color: Colors.white,
-          ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   Widget _buildStickerMessage(Event event) {
     return Image.network(
@@ -378,14 +378,35 @@ class _RoomPageState extends State<RoomPage> {
                     itemBuilder: (context, index) {
                       final event = _timeline!.events[index];
 
-                      // Filter out non-message events
-                      if (event.type != EventTypes.Message &&
-                          event.type != EventTypes.Sticker) {
-                        return const SizedBox.shrink();
+                      switch (event.type) {
+                        case EventTypes.Message:
+                          return _buildMessageBubble(event,
+                              event.senderId == widget.room.client.userID);
+                        case EventTypes.RoomCreate:
+                          return StateMessage(
+                              "${widget.room.name} is created by ${event.content["creator"]}");
+                        default:
+                          return SizedBox.shrink();
                       }
-
-                      return _buildMessageBubble(
-                          event, event.senderId == widget.room.client.userID);
+                      // if (!{
+                      //   EventTypes.Message,
+                      //   EventTypes.Sticker,
+                      //   EventTypes.Encrypted,
+                      //   EventTypes.CallInvite,
+                      // }.contains(event.type)) {
+                      //   if (event.type.startsWith('m.call.')) {
+                      //     return const SizedBox.shrink();
+                      //   }
+                      //   // if (event.type == EventTypes.RoomCreate) {
+                      //   //   return RoomCreationStateEvent(event: event);
+                      //   // }
+                      //   // return StateMessage(event);
+                      // }
+                      // // Filter out non-message events
+                      // if (event.type != EventTypes.Message &&
+                      //     event.type != EventTypes.Sticker) {
+                      //   return SizedBox.shrink();
+                      // }
                     },
                   ),
           ),
@@ -558,3 +579,35 @@ class _RoomPageState extends State<RoomPage> {
   }
 }
 
+class StateMessage extends StatelessWidget {
+  final String eventData;
+  const StateMessage(this.eventData, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Material(
+            color: theme.colorScheme.surface.withAlpha(128),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+              child: Text(
+                eventData,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.black
+                    ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
