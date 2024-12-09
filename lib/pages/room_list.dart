@@ -51,7 +51,7 @@ class _RoomListPageState extends State<RoomListPage> {
       setState(() => _isLoading = true);
       final client = Provider.of<Client>(context, listen: false);
       String roomId = await client.createRoom(
-          isDirect: true, invite: [userId], name: 'DM $userName($userId)');
+          isDirect: false, invite: [userId], name: 'DM $userName($userId)');
 
       _searchController.clear();
       _searchData = null;

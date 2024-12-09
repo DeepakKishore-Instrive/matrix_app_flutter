@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
+import 'package:provider/provider.dart';
 
 class RoomDetails extends StatefulWidget {
   final Room room;
@@ -11,6 +12,10 @@ class RoomDetails extends StatefulWidget {
 
 class _RoomDetailsState extends State<RoomDetails> {
   List<User> _roomMembers = [];
+  bool isTopicEdit = false;
+  TextEditingController controller = TextEditingController();
+  bool _isLoading = false;
+  String topic = "";
 
   @override
   void initState() {
@@ -43,7 +48,7 @@ class _RoomDetailsState extends State<RoomDetails> {
           maxChildSize: 0.9,
           builder: (_, controller) {
             return Container(
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
@@ -60,7 +65,7 @@ class _RoomDetailsState extends State<RoomDetails> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         IconButton(
-                          icon: Icon(Icons.person_add),
+                          icon: const Icon(Icons.person_add),
                           onPressed: _inviteMember,
                         ),
                       ],
@@ -68,7 +73,7 @@ class _RoomDetailsState extends State<RoomDetails> {
                   ),
                   Expanded(
                     child: _roomMembers.isEmpty
-                        ? Center(child: CircularProgressIndicator())
+                        ? const Center(child: CircularProgressIndicator())
                         : ListView.builder(
                             controller: controller,
                             itemCount: _roomMembers.length,
@@ -77,7 +82,7 @@ class _RoomDetailsState extends State<RoomDetails> {
                               return ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: Colors.grey[300],
-                                  child: Icon(Icons.person),
+                                  child: const Icon(Icons.person),
                                 ),
                                 title: Text(member.displayName ?? member.id),
                                 subtitle: Text(_getMemberRole(member)),
@@ -104,7 +109,7 @@ class _RoomDetailsState extends State<RoomDetails> {
   Widget _buildMemberActions(User member) {
     return PopupMenuButton<String>(
       itemBuilder: (context) => [
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'remove',
           child: Row(
             children: [
@@ -114,7 +119,7 @@ class _RoomDetailsState extends State<RoomDetails> {
             ],
           ),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'make_admin',
           child: Row(
             children: [
@@ -124,7 +129,7 @@ class _RoomDetailsState extends State<RoomDetails> {
             ],
           ),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'make_moderator',
           child: Row(
             children: [
@@ -152,29 +157,30 @@ class _RoomDetailsState extends State<RoomDetails> {
   }
 
   void _inviteMember() {
+    final TextEditingController inviteController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) {
-        final TextEditingController inviteController = TextEditingController();
+        
         return AlertDialog(
-          title: Text('Invite Member'),
+          title: const Text('Invite Member'),
           content: TextField(
             controller: inviteController,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               hintText: 'Enter Matrix ID',
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
                 _performInvite(inviteController.text);
                 Navigator.of(context).pop();
               },
-              child: Text('Invite'),
+              child: const Text('Invite'),
             ),
           ],
         );
@@ -184,7 +190,7 @@ class _RoomDetailsState extends State<RoomDetails> {
 
   void _performInvite(String matrixId) async {
     try {
-      await widget.room.invite(matrixId);
+      await widget.room.invite(matrixId, reason: "Jzr");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Invitation sent to $matrixId')),
       );
@@ -233,10 +239,10 @@ class _RoomDetailsState extends State<RoomDetails> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Room Details"),
+        title: const Text("Room Details"),
       ),
       body: ListView(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         children: [
           _buildRoomHeader(),
           _buildMemberSection(),
@@ -253,9 +259,9 @@ class _RoomDetailsState extends State<RoomDetails> {
         CircleAvatar(
           radius: 50,
           backgroundColor: Colors.grey[300],
-          child: Icon(Icons.group, size: 50),
+          child: const Icon(Icons.group, size: 50),
         ),
-        SizedBox(height: 10),
+        const SizedBox(height: 10),
         Text(
           widget.room.displayname,
           style: Theme.of(context).textTheme.headlineSmall,
@@ -270,8 +276,8 @@ class _RoomDetailsState extends State<RoomDetails> {
 
     return Card(
       child: ListTile(
-        leading: Icon(Icons.people),
-        title: Text('Members'),
+        leading: const Icon(Icons.people),
+        title: const Text('Members'),
         trailing: Text('$totalMembers'),
         onTap: _showMemberBottomSheet,
       ),
@@ -281,20 +287,86 @@ class _RoomDetailsState extends State<RoomDetails> {
   Widget _buildRoomCreationDetails() {
     return Card(
       child: ListTile(
-        leading: Icon(Icons.calendar_today),
-        title: Text('Created'),
+        leading: const Icon(Icons.calendar_today),
+        title: const Text('Created'),
         trailing: Text(_formatDate(widget.room.timeCreated)),
       ),
     );
   }
 
+  //   bool _canEditTopic() {
+  //   // Check power levels to see if user can change room topic
+  //   final powerLevelsEvent = widget.room.getState(EventTypes.RoomPowerLevels);
+  //   if (powerLevelsEvent == null) return false;
+
+  //   final int? requiredPowerLevel = powerLevelsEvent.content['events']?['m.room.topic'];
+  //   final int? userPowerLevel = powerLevelsEvent.content['users']?[widget.room.client.userID];
+
+  //   return (userPowerLevel ?? 0) >= (requiredPowerLevel ?? 50);
+  // }
+
+  void _saveRoomTopic() async {
+    final newTopic = controller.text.trim();
+
+    // if (!_canEditTopic()) {
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     const SnackBar(content: Text('You do not have permission to change the room topic')),
+    //   );
+    //   return;
+    // }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Send room topic state event
+      await widget.room.setDescription(newTopic);
+
+      setState(() {
+        isTopicEdit = false;
+        _isLoading = false;
+        topic = newTopic;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Room topic updated to: $newTopic')),
+      );
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update room topic: $e')),
+      );
+    }
+  }
+
   Widget _buildRoomTopic() {
-    final topic = widget.room.topic;
+    topic = widget.room.topic;
+
     return Card(
       child: ListTile(
-        leading: Icon(Icons.description),
-        title: Text('Room Topic'),
-        subtitle: Text(topic.isNotEmpty ? topic : 'No topic set'),
+        leading: const Icon(Icons.description),
+        title: const Text('Room Topic'),
+        subtitle: isTopicEdit
+            ? TextField(
+                controller: controller,
+                decoration: InputDecoration(hintText: "Enter Room Topic"),
+              )
+            : Text(topic.isNotEmpty ? topic : 'No topic set'),
+        trailing: _isLoading
+            ? CircularProgressIndicator()
+            : isTopicEdit
+                ? IconButton(onPressed: _saveRoomTopic, icon: Icon(Icons.check))
+                : IconButton(
+                    onPressed: () {
+                      setState(() {
+                        isTopicEdit = true;
+                      });
+                    },
+                    icon: Icon(Icons.edit)),
       ),
     );
   }

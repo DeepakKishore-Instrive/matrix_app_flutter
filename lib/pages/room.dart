@@ -342,6 +342,42 @@ class _RoomPageState extends State<RoomPage> {
     );
   }
 
+  Widget _buildReplyPreview() {
+    if (_replyingToEvent == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      color: Colors.grey[100],
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Replying to ${_replyingToEvent!.senderFromMemoryOrFallback.calcDisplayname()}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                Text(
+                  _replyingToEvent!.plaintextBody,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: _cancelReply,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showImageDialog(Event event) {
     showDialog(
       context: context,
@@ -417,6 +453,8 @@ class _RoomPageState extends State<RoomPage> {
                     },
                   ),
           ),
+          _buildReplyPreview(),
+          const Divider(height: 1),
           _buildMessageInput(),
         ],
       ),
@@ -488,7 +526,6 @@ class _RoomPageState extends State<RoomPage> {
               _sendFileMessage();
             },
           ),
-          
         ],
       ),
     );
