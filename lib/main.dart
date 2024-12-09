@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_2/login.dart';
-import 'package:flutter_application_2/room_list.dart';
+import 'package:flutter_application_2/pages/login.dart';
+import 'package:flutter_application_2/pages/room_list.dart';
 import 'package:matrix/matrix.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';

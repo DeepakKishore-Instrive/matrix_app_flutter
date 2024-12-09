@@ -11,6 +11,7 @@ environment:
 
 dependencies:
   cached_network_image: ^3.4.1
+  chewie: ^1.8.5
   file_picker: ^8.1.4
   flutter:
     sdk: flutter
@@ -24,6 +25,7 @@ dependencies:
   path_provider: ^2.1.5
   provider: ^6.1.2
   sqflite: ^2.4.1
+  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:

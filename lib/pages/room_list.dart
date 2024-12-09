@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_2/login.dart';
-import 'package:flutter_application_2/room.dart';
+import 'package:flutter_application_2/pages/login.dart';
+import 'package:flutter_application_2/pages/room.dart';
 import 'package:matrix/matrix.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';

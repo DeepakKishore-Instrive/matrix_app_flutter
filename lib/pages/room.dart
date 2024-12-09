@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_2/widgets/mx_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:matrix/matrix.dart';
 import 'package:mime/mime.dart';
@@ -55,7 +56,7 @@ class _RoomPageState extends State<RoomPage> {
   }) async {
     try {
       final txnId = DateTime.now().millisecondsSinceEpoch.toString();
-      
+
       // Prepare message content
       final content = <String, dynamic>{
         'body': body ?? _sendController.text.trim(),
@@ -77,12 +78,8 @@ class _RoomPageState extends State<RoomPage> {
       }
 
       // Send the message
-      await widget.room.client.sendMessage(
-        widget.room.id, 
-        'm.room.message', 
-        txnId, 
-        content
-      );
+      await widget.room.client
+          .sendMessage(widget.room.id, 'm.room.message', txnId, content);
 
       // Reset UI state
       _sendController.clear();
@@ -98,10 +95,10 @@ class _RoomPageState extends State<RoomPage> {
     try {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      
+
       if (pickedFile != null) {
         final file = File(pickedFile.path);
-        
+
         // Show loading dialog
         _showLoadingDialog();
 
@@ -127,10 +124,10 @@ class _RoomPageState extends State<RoomPage> {
   Future<void> _sendFileMessage() async {
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.any);
-      
+
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
-        
+
         // Show loading dialog
         _showLoadingDialog();
 
@@ -141,9 +138,10 @@ class _RoomPageState extends State<RoomPage> {
         Navigator.of(context).pop();
 
         // Determine message type based on file type
-        final mimeType = lookupMimeType(file.path) ?? 'application/octet-stream';
+        final mimeType =
+            lookupMimeType(file.path) ?? 'application/octet-stream';
         String msgType = 'm.file';
-        
+
         if (mimeType.startsWith('image/')) msgType = 'm.image';
         if (mimeType.startsWith('audio/')) msgType = 'm.audio';
         if (mimeType.startsWith('video/')) msgType = 'm.video';
@@ -162,12 +160,12 @@ class _RoomPageState extends State<RoomPage> {
   }
 
   Future<Uri> _uploadMatrixFile(File file) async {
-  final matrixFile = await widget.room.client.uploadContent(
-    file.readAsBytesSync(),
-    filename: path.basename(file.path),
-  );
-  return matrixFile; // Use the `url` property instead
-}
+    final matrixFile = await widget.room.client.uploadContent(
+      file.readAsBytesSync(),
+      filename: path.basename(file.path),
+    );
+    return matrixFile; // Use the `url` property instead
+  }
 
   void _showLoadingDialog() {
     showDialog(
@@ -191,29 +189,29 @@ class _RoomPageState extends State<RoomPage> {
               event.plaintextBody,
               style: theme.textTheme.bodyMedium,
             );
-          
+
           case MessageTypes.Image:
             return _buildImageMessage(event);
-          
+
           case MessageTypes.File:
             return _buildFileMessage(event);
-          
+
           case MessageTypes.Audio:
             return _buildAudioMessage(event);
-          
+
           case MessageTypes.Video:
             return _buildVideoMessage(event);
-          
+
           default:
             return Text(
               event.plaintextBody,
               style: theme.textTheme.bodyMedium,
             );
         }
-      
+
       case EventTypes.Sticker:
         return _buildStickerMessage(event);
-      
+
       default:
         return Text(
           'Unsupported message type: ${event.type}',
@@ -226,25 +224,27 @@ class _RoomPageState extends State<RoomPage> {
 
   Widget _buildImageMessage(Event event) {
     return GestureDetector(
-      onTap: () => _showImageDialog(event),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: 200,
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        child: MxcImage(event: event,))
-      //   Image.network(
-          
-      //     event.attachmentMxcUrl
-      //     .toString(),
-      //     fit: BoxFit.cover,
-      //     loadingBuilder: (context, child, loadingProgress) {
-      //       if (loadingProgress == null) return child;
-      //       return const Center(child: CircularProgressIndicator());
-      //     },
-      //   ),
-      // ),
-    );
+        onTap: () => _showImageDialog(event),
+        child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: 200,
+              maxWidth: MediaQuery.of(context).size.width * 0.7,
+            ),
+            child: MxcImage(
+              event: event,
+            ))
+        //   Image.network(
+
+        //     event.attachmentMxcUrl
+        //     .toString(),
+        //     fit: BoxFit.cover,
+        //     loadingBuilder: (context, child, loadingProgress) {
+        //       if (loadingProgress == null) return child;
+        //       return const Center(child: CircularProgressIndicator());
+        //     },
+        //   ),
+        // ),
+        );
   }
 
   Widget _buildFileMessage(Event event) {
@@ -253,8 +253,7 @@ class _RoomPageState extends State<RoomPage> {
       title: Text(event.body),
       trailing: IconButton(
         icon: const Icon(Icons.download),
-        onPressed: () {
-        },
+        onPressed: () {},
       ),
     );
   }
@@ -265,29 +264,38 @@ class _RoomPageState extends State<RoomPage> {
       title: Text(event.body),
       trailing: IconButton(
         icon: const Icon(Icons.play_arrow),
-        onPressed: () {
-        },
+        onPressed: () {},
       ),
     );
   }
 
   Widget _buildVideoMessage(Event event) {
     return GestureDetector(
-      onTap: () {
-      },
+      onTap: () {},
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Image.network(
-            event.thumbnailMxcUrl.toString(),
-            fit: BoxFit.cover,
-            width: 200,
-            height: 200,
-          ),
+          FutureBuilder(
+              future:event.downloadAndDecryptAttachment(
+        getThumbnail: true,),
+              builder: (context, AsyncSnapshot<MatrixFile?> asyncData) {
+                if (asyncData.hasData && asyncData.data != null) {
+                  return Image.memory(
+                    asyncData.data!.bytes,
+                    fit: BoxFit.cover,
+                    width: 200,
+                    height: 200,
+                  );
+                }
+                return SizedBox(
+                  height: 250,
+                  width: 250,
+                );
+              }),
           const CircleAvatar(
             backgroundColor: Colors.black54,
             child: Icon(
-              Icons.play_arrow, 
+              Icons.play_arrow,
               color: Colors.white,
             ),
           ),
@@ -327,8 +335,7 @@ class _RoomPageState extends State<RoomPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert),
-            onPressed: () {
-            },
+            onPressed: () {},
           ),
         ],
       ),
@@ -342,17 +349,15 @@ class _RoomPageState extends State<RoomPage> {
                     itemCount: _timeline!.events.length,
                     itemBuilder: (context, index) {
                       final event = _timeline!.events[index];
-                      
+
                       // Filter out non-message events
-                      if (event.type != EventTypes.Message && 
+                      if (event.type != EventTypes.Message &&
                           event.type != EventTypes.Sticker) {
                         return const SizedBox.shrink();
                       }
 
                       return _buildMessageBubble(
-                        event, 
-                        event.senderId == widget.room.client.userID
-                      );
+                          event, event.senderId == widget.room.client.userID);
                     },
                   ),
           ),
@@ -362,7 +367,7 @@ class _RoomPageState extends State<RoomPage> {
     );
   }
 
-   String _convertMxcToHttp(String? mxcUrl) {
+  String _convertMxcToHttp(String? mxcUrl) {
     if (mxcUrl == null || !mxcUrl.startsWith('mxc://')) return '';
     return 'https://matrix.org/_matrix/media/v3/download/${mxcUrl.substring(6)}';
   }
@@ -432,6 +437,7 @@ class _RoomPageState extends State<RoomPage> {
       ),
     );
   }
+
   void _startReply(Event event) {
     setState(() {
       _replyingToEvent = event;
@@ -443,6 +449,7 @@ class _RoomPageState extends State<RoomPage> {
       _replyingToEvent = null;
     });
   }
+
   Widget _buildMessageBubble(Event event, bool ownMessage) {
     final theme = Theme.of(context);
 
@@ -521,7 +528,6 @@ class _RoomPageState extends State<RoomPage> {
       ),
     );
   }
-
 }
 
 class ReplyContent extends StatelessWidget {
@@ -595,204 +601,3 @@ class ReplyContent extends StatelessWidget {
 }
 
 
-
-class MxcImage extends StatefulWidget {
-  final Uri? uri;
-  final Event? event;
-  final double? width;
-  final double? height;
-  final BoxFit? fit;
-  final bool isThumbnail;
-  final bool animated;
-  final Duration retryDuration;
-  final ThumbnailMethod thumbnailMethod;
-  final Widget Function(BuildContext context)? placeholder;
-  final String? cacheKey;
-  final Client? client;
-
-  const MxcImage({
-    this.uri,
-    this.event,
-    this.width,
-    this.height,
-    this.fit,
-    this.placeholder,
-    this.isThumbnail = true,
-    this.animated = false,
-    this.retryDuration = const Duration(seconds: 2),
-    this.thumbnailMethod = ThumbnailMethod.scale,
-    this.cacheKey,
-    this.client,
-    super.key,
-  });
-
-  @override
-  State<MxcImage> createState() => _MxcImageState();
-}
-
-class _MxcImageState extends State<MxcImage> {
-  static final Map<String, Uint8List> _imageDataCache = {};
-  Uint8List? _imageDataNoCache;
-
-  Uint8List? get _imageData => widget.cacheKey == null
-      ? _imageDataNoCache
-      : _imageDataCache[widget.cacheKey];
-
-  set _imageData(Uint8List? data) {
-    if (data == null) return;
-    final cacheKey = widget.cacheKey;
-    cacheKey == null
-        ? _imageDataNoCache = data
-        : _imageDataCache[cacheKey] = data;
-  }
-
-  Future<void> _load() async {
-    final client =
-        widget.client ?? widget.event?.room.client ?? Provider.of<Client>(context);
-    final uri = widget.uri;
-    final event = widget.event;
-
-    if (uri != null) {
-      final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-      final width = widget.width;
-      final realWidth = width == null ? null : width * devicePixelRatio;
-      final height = widget.height;
-      final realHeight = height == null ? null : height * devicePixelRatio;
-
-      final remoteData = await client.downloadMxcCached(
-        uri,
-        width: realWidth,
-        height: realHeight,
-        thumbnailMethod: widget.thumbnailMethod,
-        isThumbnail: widget.isThumbnail,
-        animated: widget.animated,
-      );
-      if (!mounted) return;
-      setState(() {
-        _imageData = remoteData;
-      });
-    }
-
-    if (event != null) {
-      final data = await event.downloadAndDecryptAttachment(
-        getThumbnail: widget.isThumbnail,
-      );
-      if (data.msgType == "m.image") {
-        if (!mounted) return;
-        setState(() {
-          _imageData = data.bytes;
-        });
-        return;
-      }
-    }
-  }
-
-  void _tryLoad(_) async {
-    if (_imageData != null) {
-      return;
-    }
-    try {
-      await _load();
-    } catch (_) {
-      if (!mounted) return;
-      await Future.delayed(widget.retryDuration);
-      _tryLoad(_);
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _tryLoad(context);
-  }
-
-  Widget placeholder(BuildContext context) =>
-      widget.placeholder?.call(context) ??
-      Container(
-        width: widget.width,
-        height: widget.height,
-        alignment: Alignment.center,
-        child: const CircularProgressIndicator.adaptive(strokeWidth: 2),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final data = _imageData;
-    final hasData = data != null && data.isNotEmpty;
-
-    return AnimatedCrossFade(
-      crossFadeState:
-          hasData ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-      duration: const Duration(milliseconds: 128),
-      firstChild: placeholder(context),
-      secondChild: hasData
-          ? Image.memory(
-              data,
-              width: widget.width,
-              height: widget.height,
-              fit: widget.fit,
-              filterQuality:
-                  widget.isThumbnail ? FilterQuality.low : FilterQuality.medium,
-              errorBuilder: (context, __, ___) {
-                _imageData = null;
-                WidgetsBinding.instance.addPostFrameCallback(_tryLoad);
-                return placeholder(context);
-              },
-            )
-          : SizedBox(
-              width: widget.width,
-              height: widget.height,
-            ),
-    );
-  }
-}
-
-extension ClientDownloadContentExtension on Client {
-  Future<Uint8List> downloadMxcCached(
-    Uri mxc, {
-    num? width,
-    num? height,
-    bool isThumbnail = false,
-    bool? animated,
-    ThumbnailMethod? thumbnailMethod,
-  }) async {
-    // To stay compatible with previous storeKeys:
-    final cacheKey = isThumbnail
-        // ignore: deprecated_member_use
-        ? mxc.getThumbnail(
-            this,
-            width: width,
-            height: height,
-            animated: animated,
-            method: thumbnailMethod!,
-          )
-        : mxc;
-
-    final cachedData = await database?.getFile(cacheKey);
-    if (cachedData != null) return cachedData;
-
-    final httpUri = isThumbnail
-        ? await mxc.getThumbnailUri(
-            this,
-            width: width,
-            height: height,
-            animated: animated,
-            method: thumbnailMethod,
-          )
-        : await mxc.getDownloadUri(this);
-
-    final response = await httpClient.get(
-      httpUri,
-      headers:
-          accessToken == null ? null : {'authorization': 'Bearer $accessToken'},
-    );
-    if (response.statusCode != 200) {
-      throw Exception();
-    }
-    final remoteData = response.bodyBytes;
-
-    await database?.storeFile(cacheKey, remoteData, 0);
-
-    return remoteData;
-  }
-}
