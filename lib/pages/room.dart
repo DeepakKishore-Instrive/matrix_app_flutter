@@ -10,8 +10,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:matrix/matrix.dart';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as path;
-import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 class RoomPage extends StatefulWidget {
   final Room room;
@@ -60,19 +58,16 @@ class _RoomPageState extends State<RoomPage> {
     try {
       final txnId = DateTime.now().millisecondsSinceEpoch.toString();
 
-      // Prepare message content
       final content = <String, dynamic>{
         'body': body ?? _sendController.text.trim(),
         'msgtype': msgType,
       };
 
-      // Add file-related info if sending a file
       if (url != null) {
         content['url'] = url;
         if (filename != null) content['filename'] = filename;
       }
 
-      // Handle reply if applicable
       if (_replyingToEvent != null) {
         content['m.relates_to'] = {
           'rel_type': 'm.in_reply_to',
@@ -80,11 +75,9 @@ class _RoomPageState extends State<RoomPage> {
         };
       }
 
-      // Send the message
       await widget.room.client
           .sendMessage(widget.room.id, 'm.room.message', txnId, content);
 
-      // Reset UI state
       _sendController.clear();
       setState(() {
         _replyingToEvent = null;
@@ -102,16 +95,12 @@ class _RoomPageState extends State<RoomPage> {
       if (pickedFile != null) {
         final file = File(pickedFile.path);
 
-        // Show loading dialog
         _showLoadingDialog();
 
-        // Upload file to Matrix
         final matrixFile = await _uploadMatrixFile(file);
 
-        // Close loading dialog
         Navigator.of(context).pop();
 
-        // Send image message
         await _sendMessage(
           body: path.basename(pickedFile.path),
           msgType: 'm.image',
@@ -124,6 +113,68 @@ class _RoomPageState extends State<RoomPage> {
     }
   }
 
+  // Unread message separator widget
+  Widget _buildUnreadSeparator(int unreadCount) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Divider(
+              color: Colors.red,
+              thickness: 1.5,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+              decoration: BoxDecoration(
+                color: Colors.red.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$unreadCount New Messages',
+                style: TextStyle(
+                  color: Colors.red.shade800,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+          const Expanded(
+            child: Divider(
+              color: Colors.red,
+              thickness: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _calculateUnreadCount() {
+    if (_timeline == null) return 0;
+
+    int unreadCount = 0;
+    bool foundLastRead = false;
+
+    for (final event in _timeline!.events) {
+      if (event.eventId == widget.room.fullyRead) {
+        foundLastRead = true;
+        break;
+      }
+
+      if (event.type == EventTypes.Message) {
+        unreadCount++;
+      }
+    }
+
+    return foundLastRead ? unreadCount : 0;
+  }
+
   Future<void> _sendFileMessage() async {
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.any);
@@ -131,16 +182,12 @@ class _RoomPageState extends State<RoomPage> {
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
 
-        // Show loading dialog
         _showLoadingDialog();
 
-        // Upload file to Matrix
         final matrixFile = await _uploadMatrixFile(file);
 
-        // Close loading dialog
         Navigator.of(context).pop();
 
-        // Determine message type based on file type
         final mimeType =
             lookupMimeType(file.path) ?? 'application/octet-stream';
         String msgType = 'm.file';
@@ -149,7 +196,6 @@ class _RoomPageState extends State<RoomPage> {
         if (mimeType.startsWith('audio/')) msgType = 'm.audio';
         if (mimeType.startsWith('video/')) msgType = 'm.video';
 
-        // Send file message
         await _sendMessage(
           body: path.basename(file.path),
           msgType: msgType,
@@ -167,7 +213,7 @@ class _RoomPageState extends State<RoomPage> {
       file.readAsBytesSync(),
       filename: path.basename(file.path),
     );
-    return matrixFile; // Use the `url` property instead
+    return matrixFile;
   }
 
   void _showLoadingDialog() {
@@ -183,7 +229,6 @@ class _RoomPageState extends State<RoomPage> {
   Widget _buildMessageContent(Event event) {
     final theme = Theme.of(context);
 
-    // Handle different message types
     switch (event.type) {
       case EventTypes.Message:
         switch (event.messageType) {
@@ -235,19 +280,7 @@ class _RoomPageState extends State<RoomPage> {
             ),
             child: MxcImage(
               event: event,
-            ))
-        //   Image.network(
-
-        //     event.attachmentMxcUrl
-        //     .toString(),
-        //     fit: BoxFit.cover,
-        //     loadingBuilder: (context, child, loadingProgress) {
-        //       if (loadingProgress == null) return child;
-        //       return const Center(child: CircularProgressIndicator());
-        //     },
-        //   ),
-        // ),
-        );
+            )));
   }
 
   Widget _buildFileMessage(Event event) {
@@ -292,7 +325,6 @@ class _RoomPageState extends State<RoomPage> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Thumbnail preview
           FutureBuilder(
             future: event.downloadAndDecryptAttachment(
               getThumbnail: true,
@@ -320,7 +352,6 @@ class _RoomPageState extends State<RoomPage> {
               );
             },
           ),
-          // Play button overlay
           const CircleAvatar(
             backgroundColor: Colors.black54,
             child: Icon(
@@ -378,13 +409,25 @@ class _RoomPageState extends State<RoomPage> {
     );
   }
 
+  // Find the index where unread separator should be inserted
+  int _findUnreadSeparatorIndex() {
+    if (_timeline == null) return -1;
+
+    for (int i = 0; i < _timeline!.events.length; i++) {
+      if (_timeline!.events[i].eventId == widget.room.fullyRead) {
+        return i;
+      }
+    }
+
+    return -1;
+  }
+
   void _showImageDialog(Event event) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        child: Image.network(
-          event.content['url'] as String? ?? '',
-          fit: BoxFit.contain,
+        child: MxcImage(
+          event: event,
         ),
       ),
     );
@@ -393,6 +436,8 @@ class _RoomPageState extends State<RoomPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final int unreadCount = _calculateUnreadCount();
+    final int unreadSeparatorIndex = _findUnreadSeparatorIndex();
 
     return Scaffold(
       appBar: AppBar(
@@ -417,10 +462,17 @@ class _RoomPageState extends State<RoomPage> {
                 ? const Center(child: CircularProgressIndicator.adaptive())
                 : ListView.builder(
                     reverse: true,
-                    itemCount: _timeline!.events.length,
+                    itemCount:
+                        _timeline!.events.length + (unreadCount > 0 ? 1 : 0),
                     itemBuilder: (context, index) {
-                      final event = _timeline!.events[index];
-
+                      if (unreadCount > 0 && index == unreadSeparatorIndex) {
+                        return _buildUnreadSeparator(unreadCount);
+                      }
+                      final eventIndex = index -
+                          (unreadCount > 0 && index > unreadSeparatorIndex
+                              ? 1
+                              : 0);
+                      final event = _timeline!.events[eventIndex];
                       switch (event.type) {
                         case EventTypes.Message:
                           return _buildMessageBubble(event,
@@ -431,25 +483,6 @@ class _RoomPageState extends State<RoomPage> {
                         default:
                           return SizedBox.shrink();
                       }
-                      // if (!{
-                      //   EventTypes.Message,
-                      //   EventTypes.Sticker,
-                      //   EventTypes.Encrypted,
-                      //   EventTypes.CallInvite,
-                      // }.contains(event.type)) {
-                      //   if (event.type.startsWith('m.call.')) {
-                      //     return const SizedBox.shrink();
-                      //   }
-                      //   // if (event.type == EventTypes.RoomCreate) {
-                      //   //   return RoomCreationStateEvent(event: event);
-                      //   // }
-                      //   // return StateMessage(event);
-                      // }
-                      // // Filter out non-message events
-                      // if (event.type != EventTypes.Message &&
-                      //     event.type != EventTypes.Sticker) {
-                      //   return SizedBox.shrink();
-                      // }
                     },
                   ),
           ),
@@ -651,7 +684,7 @@ class StateMessage extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.black),
+                style: const TextStyle(color: Colors.black),
               ),
             ),
           ),

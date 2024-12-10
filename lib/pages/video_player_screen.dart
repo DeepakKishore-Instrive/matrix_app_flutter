@@ -26,7 +26,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _initializePlayer() async {
-    // Create a temporary file from bytes
     final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/video_${DateTime.now().millisecondsSinceEpoch}.mp4');
     await file.writeAsBytes(widget.videoBytes);

@@ -34,20 +34,7 @@ class MxcImage extends StatefulWidget {
 }
 
 class _MxcImageState extends State<MxcImage> {
-  static final Map<String, Uint8List> _imageDataCache = {};
-  Uint8List? _imageDataNoCache;
-
-  Uint8List? get _imageData => widget.cacheKey == null
-      ? _imageDataNoCache
-      : _imageDataCache[widget.cacheKey];
-
-  set _imageData(Uint8List? data) {
-    if (data == null) return;
-    final cacheKey = widget.cacheKey;
-    cacheKey == null
-        ? _imageDataNoCache = data
-        : _imageDataCache[cacheKey] = data;
-  }
+  Uint8List? _imageData;
 
   Future<void> _load() async {
     final event = widget.event;
@@ -67,9 +54,6 @@ class _MxcImageState extends State<MxcImage> {
   }
 
   void _tryLoad(_) async {
-    if (_imageData != null) {
-      return;
-    }
     try {
       await _load();
     } catch (_) {
