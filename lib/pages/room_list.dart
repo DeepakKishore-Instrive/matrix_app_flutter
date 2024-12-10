@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_2/pages/create_group.dart';
 import 'package:flutter_application_2/pages/login.dart';
 import 'package:flutter_application_2/pages/room.dart';
 import 'package:matrix/matrix.dart';
@@ -51,7 +52,9 @@ class _RoomListPageState extends State<RoomListPage> {
       setState(() => _isLoading = true);
       final client = Provider.of<Client>(context, listen: false);
       String roomId = await client.createRoom(
-          isDirect: true, invite: [userId],);
+        isDirect: true,
+        invite: [userId],
+      );
 
       _searchController.clear();
       _searchData = null;
@@ -68,6 +71,8 @@ class _RoomListPageState extends State<RoomListPage> {
       _showErrorSnackBar('Could not create room: ${e.toString()}');
     }
   }
+
+ 
 
   Future<void> _searchUsers() async {
     if (_searchController.text.isEmpty) return;
@@ -241,6 +246,15 @@ class _RoomListPageState extends State<RoomListPage> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: InkWell(
+          onTap: () {},
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: CircleAvatar(
+              child: Text("Me"),
+            ),
+          ),
+        ),
         title: const Text('Matrix Chats'),
         actions: [
           IconButton(
@@ -262,6 +276,14 @@ class _RoomListPageState extends State<RoomListPage> {
                   ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (context) => CreatedGroup(),
+          ));
+        },
+        child: Icon(Icons.add),
       ),
     );
   }
