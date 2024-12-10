@@ -167,7 +167,8 @@ class _RoomPageState extends State<RoomPage> {
         break;
       }
 
-      if (event.type == EventTypes.Message) {
+      if (event.type == EventTypes.Message &&
+          event.senderId != widget.room.client.userID) {
         unreadCount++;
       }
     }
