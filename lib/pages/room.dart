@@ -23,13 +23,169 @@ class _RoomPageState extends State<RoomPage> {
   Timeline? _timeline;
   final TextEditingController _sendController = TextEditingController();
   Event? _replyingToEvent;
+   bool _isRoomEncrypted = false;
 
   @override
   void initState() {
     super.initState();
     _loadTimeline();
+    _checkEncryptionStatus();
+  }
+  Future<void> _checkEncryptionStatus() async {
+    // try {
+      
+      
+      setState(() {
+        _isRoomEncrypted = widget.room.encrypted ?? false;
+      });
+
+      
+      if (!_isRoomEncrypted) {
+        await _promptEnableEncryption();
+      }
+    // } catch (e) {
+    //   _showErrorSnackBar('Error checking encryption status: $e');
+    // }
   }
 
+  Future<void> _promptEnableEncryption() async {
+    
+    final bool? shouldEnable = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enable End-to-End Encryption'),
+        content: const Text('Do you want to enable end-to-end encryption for this room?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldEnable == true) {
+      await _enableRoomEncryption();
+    }
+  }
+
+  Future<void> _enableRoomEncryption() async {
+    try {
+      
+      
+      await widget.room.enableEncryption();
+      
+      setState(() {
+        _isRoomEncrypted = true;
+      });
+
+      _showSuccessSnackBar('End-to-End Encryption enabled');
+    } catch (e) {
+      _showErrorSnackBar('Failed to enable encryption: $e');
+    }
+  }
+
+  Future<void> _sendEncryptedMessage({
+    String? body,
+    String msgType = 'm.text',
+    String? url,
+    String? filename,
+  }) async {
+    try {
+      
+      if (_isRoomEncrypted) {
+        
+        await _prepareEncryption();
+      }
+
+      final txnId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      final content = <String, dynamic>{
+        'body': body ?? _sendController.text.trim(),
+        'msgtype': msgType,
+      };
+
+      if (url != null) {
+        content['url'] = url;
+        if (filename != null) content['filename'] = filename;
+      }
+
+      if (_replyingToEvent != null) {
+        content['m.relates_to'] = {
+          'rel_type': 'm.in_reply_to',
+          'event_id': _replyingToEvent!.eventId,
+        };
+      }
+
+      await widget.room.client
+          .sendMessage(widget.room.id, 'm.room.message', txnId, content);
+
+      _sendController.clear();
+      setState(() {
+        _replyingToEvent = null;
+      });
+    } catch (e) {
+      _showErrorSnackBar('Error sending message: $e');
+    }
+  }
+
+  
+  Future<void> _prepareEncryption() async {
+    try {
+      final client = widget.room.client;
+
+      
+      if (!(client.encryption?.enabled ?? false)) {
+        await widget.room.enableEncryption();
+      }
+
+      
+      
+      await client.encryption?.bootstrap();
+    } catch (e) {
+      _showErrorSnackBar('Encryption preparation error: $e');
+    }
+  }
+
+  
+Future<void> _verifyKeys() async {
+  try {
+    final client = widget.room.client;
+    final userDeviceKeys = client.userDeviceKeys;
+    
+    userDeviceKeys.forEach((userId, deviceKeysList) {
+      for (var deviceKey in deviceKeysList.deviceKeys.values) {
+        deviceKey.setVerified(true);
+      }
+    });
+    
+    _showSuccessSnackBar('Keys verified successfully');
+  } catch (e) {
+    _showErrorSnackBar('Key verification failed: $e');
+  }
+}
+  
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _showEncryptionErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
   Future<void> _loadTimeline() async {
     try {
       _timeline = await widget.room.getTimeline(
@@ -113,7 +269,7 @@ class _RoomPageState extends State<RoomPage> {
     }
   }
 
-  // Unread message separator widget
+  
   Widget _buildUnreadSeparator(int unreadCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -410,7 +566,7 @@ class _RoomPageState extends State<RoomPage> {
     );
   }
 
-  // Find the index where unread separator should be inserted
+  
   int _findUnreadSeparatorIndex() {
     if (_timeline == null) return -1;
 
@@ -444,6 +600,12 @@ class _RoomPageState extends State<RoomPage> {
       appBar: AppBar(
         title: Text(widget.room.getLocalizedDisplayname()),
         actions: [
+           if (_isRoomEncrypted)
+            IconButton(
+              icon: const Icon(Icons.lock),
+              onPressed: _verifyKeys,
+              tooltip: 'Verify Encryption Keys',
+            ),
           IconButton(
             icon: const Icon(Icons.more_vert),
             onPressed: () {

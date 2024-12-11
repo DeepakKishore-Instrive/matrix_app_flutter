@@ -72,8 +72,6 @@ class _RoomListPageState extends State<RoomListPage> {
     }
   }
 
- 
-
   Future<void> _searchUsers() async {
     if (_searchController.text.isEmpty) return;
 
@@ -143,54 +141,63 @@ class _RoomListPageState extends State<RoomListPage> {
     return ListView.separated(
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemCount: rooms.length,
-      itemBuilder: (context, i) => ListTile(
-        leading: CircleAvatar(
-          foregroundImage: rooms[i].avatar == null
-              ? null
-              : NetworkImage(rooms[i]
-                  .avatar!
-                  .getThumbnailUri(
-                    Provider.of<Client>(context, listen: false),
-                    width: 56,
-                    height: 56,
-                  )
-                  .toString()),
-          backgroundColor: Colors.grey[300],
-          child: rooms[i].avatar == null
-              ? Icon(Icons.person, color: Colors.grey[600])
-              : null,
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                rooms[i].getLocalizedDisplayname(),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            if (rooms[i].notificationCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+      itemBuilder: (context, i) => Dismissible(
+        key: Key(i.toString()),
+        onDismissed: (direction) {},
+        child: ListTile(
+          leading: rooms[i].avatar != null
+              ? FutureBuilder(
+                  future: rooms[i].avatar!.getThumbnailUri(
+                        Provider.of<Client>(context, listen: false),
+                        width: 56,
+                        height: 56,
+                      ),
+                  builder: (context, asyncData) {
+                    if (!asyncData.hasData) {
+                      return CircularProgressIndicator.adaptive();
+                    }
+                    return CircleAvatar(
+                      foregroundImage: NetworkImage(asyncData.data.toString()),
+                      backgroundColor: Colors.grey[300],
+                      child: rooms[i].avatar == null
+                          ? Icon(Icons.person, color: Colors.grey[600])
+                          : null,
+                    );
+                  })
+              : SizedBox(),
+          title: Row(
+            children: [
+              Expanded(
                 child: Text(
-                  rooms[i].notificationCount.toString(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
+                  rooms[i].getLocalizedDisplayname(),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (rooms[i].notificationCount > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    rooms[i].notificationCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
+          subtitle: Text(
+            rooms[i].lastEvent?.body ?? 'No messages',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _join(rooms[i]),
         ),
-        subtitle: Text(
-          rooms[i].lastEvent?.body ?? 'No messages',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        onTap: () => _join(rooms[i]),
       ),
     );
   }
@@ -213,6 +220,7 @@ class _RoomListPageState extends State<RoomListPage> {
       itemCount: _searchData?.results.length,
       itemBuilder: (context, index) {
         final profile = _searchData!.results[index];
+
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           elevation: 2,
@@ -278,6 +286,7 @@ class _RoomListPageState extends State<RoomListPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: "New Group",
         onPressed: () {
           Navigator.of(context).push(MaterialPageRoute(
             builder: (context) => CreatedGroup(),
