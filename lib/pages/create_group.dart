@@ -27,7 +27,7 @@ class _CreatedGroupState extends State<CreatedGroup> {
       body: Column(
         children: [
           _buildSearchField(),
-          buildSelectedUsers(),
+          if (selectedUser.isNotEmpty) buildSelectedUsers(),
           Expanded(child: _buildSearchResults())
         ],
       ),
@@ -152,43 +152,41 @@ class _CreatedGroupState extends State<CreatedGroup> {
   }
 
   Widget buildSelectedUsers() {
-    return Flexible(
-      child: SizedBox(
-        height: 50,
-        child: ListView(
-          shrinkWrap: true,
-          scrollDirection: Axis.horizontal,
-          children: selectedUser
-              .map(
-                (e) => Container(
-                    padding: EdgeInsets.all(8),
-                    margin: EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(15),
-                        color: Colors.purple.shade100),
-                    child: Row(
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            selectedUser.removeWhere(
-                              (element) => element.userId == e.userId,
-                            );
-                            setState(() {});
-                          },
-                          child: Icon(
-                            Icons.close,
-                            size: 15,
-                          ),
+    return SizedBox(
+      height: 50,
+      child: ListView(
+        shrinkWrap: true,
+        scrollDirection: Axis.horizontal,
+        children: selectedUser
+            .map(
+              (e) => Container(
+                  padding: EdgeInsets.all(8),
+                  margin: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      color: Colors.purple.shade100),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          selectedUser.removeWhere(
+                            (element) => element.userId == e.userId,
+                          );
+                          setState(() {});
+                        },
+                        child: Icon(
+                          Icons.close,
+                          size: 15,
                         ),
-                        SizedBox(
-                          width: 5,
-                        ),
-                        Text(e.displayName ?? e.userId),
-                      ],
-                    )),
-              )
-              .toList(),
-        ),
+                      ),
+                      SizedBox(
+                        width: 5,
+                      ),
+                      Text(e.displayName ?? e.userId),
+                    ],
+                  )),
+            )
+            .toList(),
       ),
     );
   }
