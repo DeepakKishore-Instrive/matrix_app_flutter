@@ -23,38 +23,34 @@ class _RoomPageState extends State<RoomPage> {
   Timeline? _timeline;
   final TextEditingController _sendController = TextEditingController();
   Event? _replyingToEvent;
-   bool _isRoomEncrypted = false;
+  bool _isRoomEncrypted = false;
 
   @override
   void initState() {
     super.initState();
     _loadTimeline();
-    _checkEncryptionStatus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkEncryptionStatus();
+    });
   }
-  Future<void> _checkEncryptionStatus() async {
-    // try {
-      
-      
-      setState(() {
-        _isRoomEncrypted = widget.room.encrypted ?? false;
-      });
 
-      
-      if (!_isRoomEncrypted) {
-        await _promptEnableEncryption();
-      }
-    // } catch (e) {
-    //   _showErrorSnackBar('Error checking encryption status: $e');
-    // }
+  Future<void> _checkEncryptionStatus() async {
+    setState(() {
+      _isRoomEncrypted = widget.room.encrypted ?? false;
+    });
+
+    if (!_isRoomEncrypted) {
+      await _promptEnableEncryption();
+    }
   }
 
   Future<void> _promptEnableEncryption() async {
-    
     final bool? shouldEnable = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Enable End-to-End Encryption'),
-        content: const Text('Do you want to enable end-to-end encryption for this room?'),
+        content: const Text(
+            'Do you want to enable end-to-end encryption for this room?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -75,10 +71,8 @@ class _RoomPageState extends State<RoomPage> {
 
   Future<void> _enableRoomEncryption() async {
     try {
-      
-      
       await widget.room.enableEncryption();
-      
+
       setState(() {
         _isRoomEncrypted = true;
       });
@@ -89,86 +83,39 @@ class _RoomPageState extends State<RoomPage> {
     }
   }
 
-  Future<void> _sendEncryptedMessage({
-    String? body,
-    String msgType = 'm.text',
-    String? url,
-    String? filename,
-  }) async {
-    try {
-      
-      if (_isRoomEncrypted) {
-        
-        await _prepareEncryption();
-      }
-
-      final txnId = DateTime.now().millisecondsSinceEpoch.toString();
-
-      final content = <String, dynamic>{
-        'body': body ?? _sendController.text.trim(),
-        'msgtype': msgType,
-      };
-
-      if (url != null) {
-        content['url'] = url;
-        if (filename != null) content['filename'] = filename;
-      }
-
-      if (_replyingToEvent != null) {
-        content['m.relates_to'] = {
-          'rel_type': 'm.in_reply_to',
-          'event_id': _replyingToEvent!.eventId,
-        };
-      }
-
-      await widget.room.client
-          .sendMessage(widget.room.id, 'm.room.message', txnId, content);
-
-      _sendController.clear();
-      setState(() {
-        _replyingToEvent = null;
-      });
-    } catch (e) {
-      _showErrorSnackBar('Error sending message: $e');
-    }
-  }
-
   
+
   Future<void> _prepareEncryption() async {
     try {
       final client = widget.room.client;
 
-      
-      if (!(client.encryption?.enabled ?? false)) {
+      if (!_isRoomEncrypted) {
         await widget.room.enableEncryption();
       }
 
-      
-      
       await client.encryption?.bootstrap();
     } catch (e) {
       _showErrorSnackBar('Encryption preparation error: $e');
     }
   }
 
-  
-Future<void> _verifyKeys() async {
-  try {
-    final client = widget.room.client;
-    final userDeviceKeys = client.userDeviceKeys;
-    
-    userDeviceKeys.forEach((userId, deviceKeysList) {
-      for (var deviceKey in deviceKeysList.deviceKeys.values) {
-        deviceKey.setVerified(true);
-      }
-    });
-    
-    _showSuccessSnackBar('Keys verified successfully');
-  } catch (e) {
-    _showErrorSnackBar('Key verification failed: $e');
+  Future<void> _verifyKeys() async {
+    try {
+      final client = widget.room.client;
+      final userDeviceKeys = client.userDeviceKeys;
+
+      userDeviceKeys.forEach((userId, deviceKeysList) {
+        for (var deviceKey in deviceKeysList.deviceKeys.values) {
+          deviceKey.setVerified(true);
+        }
+      });
+
+      _showSuccessSnackBar('Keys verified successfully');
+    } catch (e) {
+      _showErrorSnackBar('Key verification failed: $e');
+    }
   }
-}
-  
+
   void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -186,6 +133,7 @@ Future<void> _verifyKeys() async {
       ),
     );
   }
+
   Future<void> _loadTimeline() async {
     try {
       _timeline = await widget.room.getTimeline(
@@ -231,8 +179,13 @@ Future<void> _verifyKeys() async {
         };
       }
 
-      await widget.room.client
-          .sendMessage(widget.room.id, 'm.room.message', txnId, content);
+      if (url != null) {
+        await widget.room.client
+            .sendMessage(widget.room.id, 'm.room.message', txnId, content);
+      } else {
+        await widget.room.sendTextEvent(body ?? _sendController.text.trim(),
+            txid: txnId, inReplyTo: _replyingToEvent);
+      }
 
       _sendController.clear();
       setState(() {
@@ -269,7 +222,6 @@ Future<void> _verifyKeys() async {
     }
   }
 
-  
   Widget _buildUnreadSeparator(int unreadCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -383,15 +335,42 @@ Future<void> _verifyKeys() async {
     );
   }
 
-  Widget _buildMessageContent(Event event) {
+  Future<String> decryptMessage(Event event) async {
+    try {
+      if (event.type == 'm.room.encrypted') {
+        final encryption = event.room.client.encryption;
+        if (encryption != null) {
+          final decryptedEvent = await event.room.client.encryption
+              ?.decryptRoomEvent(widget.room.id, event);
+          print(decryptedEvent);
+
+          return decryptedEvent?.plaintextBody ?? 'Decryption failed';
+        } else {
+          _enableRoomEncryption();
+        }
+      }
+
+      return event.body;
+    } catch (e) {
+      print('Decryption error: $e');
+      return 'Decryption failed';
+    }
+  }
+
+  Future<Widget> _buildMessageContent(Event event) async {
     final theme = Theme.of(context);
 
     switch (event.type) {
       case EventTypes.Message:
+      case EventTypes.Encrypted:
         switch (event.messageType) {
           case MessageTypes.Text:
+            String content = event.plaintextBody;
+            if (event.type == EventTypes.Encrypted) {
+              content = await decryptMessage(event);
+            }
             return Text(
-              event.plaintextBody,
+              content,
               style: theme.textTheme.bodyMedium,
             );
 
@@ -566,7 +545,6 @@ Future<void> _verifyKeys() async {
     );
   }
 
-  
   int _findUnreadSeparatorIndex() {
     if (_timeline == null) return -1;
 
@@ -600,7 +578,7 @@ Future<void> _verifyKeys() async {
       appBar: AppBar(
         title: Text(widget.room.getLocalizedDisplayname()),
         actions: [
-           if (_isRoomEncrypted)
+          if (_isRoomEncrypted)
             IconButton(
               icon: const Icon(Icons.lock),
               onPressed: _verifyKeys,
@@ -637,9 +615,12 @@ Future<void> _verifyKeys() async {
                               : 0);
                       final event = _timeline!.events[eventIndex];
                       switch (event.type) {
+                        case EventTypes.Encrypted:
                         case EventTypes.Message:
-                          return _buildMessageBubble(event,
-                              event.senderId == widget.room.client.userID);
+                          return _buildMessageBubble(
+                              event,
+                              event.senderId == widget.room.client.userID,
+                              event.type == EventTypes.Encrypted);
                         case EventTypes.RoomCreate:
                           return StateMessage(
                               "${widget.room.name} is created by ${event.content["creator"]}");
@@ -739,7 +720,7 @@ Future<void> _verifyKeys() async {
     });
   }
 
-  Widget _buildMessageBubble(Event event, bool ownMessage) {
+  Widget _buildMessageBubble(Event event, bool ownMessage, bool isEcrypted) {
     final theme = Theme.of(context);
 
     return GestureDetector(
@@ -800,7 +781,15 @@ Future<void> _verifyKeys() async {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  _buildMessageContent(event),
+                  FutureBuilder(
+                    future: _buildMessageContent(event),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return snapshot.data!;
+                      }
+                      return SizedBox.shrink();
+                    },
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     event.originServerTs.toIso8601String().substring(11, 16),

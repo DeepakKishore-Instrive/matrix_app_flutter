@@ -145,26 +145,28 @@ class _RoomListPageState extends State<RoomListPage> {
         key: Key(i.toString()),
         onDismissed: (direction) {},
         child: ListTile(
-          leading: rooms[i].avatar != null
-              ? FutureBuilder(
-                  future: rooms[i].avatar!.getThumbnailUri(
-                        Provider.of<Client>(context, listen: false),
-                        width: 56,
-                        height: 56,
-                      ),
-                  builder: (context, asyncData) {
-                    if (!asyncData.hasData) {
-                      return CircularProgressIndicator.adaptive();
-                    }
-                    return CircleAvatar(
-                      foregroundImage: NetworkImage(asyncData.data.toString()),
-                      backgroundColor: Colors.grey[300],
-                      child: rooms[i].avatar == null
-                          ? Icon(Icons.person, color: Colors.grey[600])
-                          : null,
-                    );
-                  })
-              : SizedBox(),
+          leading: 
+          // rooms[i].avatar != null
+          //     ? FutureBuilder(
+          //         future: rooms[i].avatar!.getThumbnailUri(
+          //               Provider.of<Client>(context, listen: false),
+          //               width: 56,
+          //               height: 56,
+          //             ),
+          //         builder: (context, asyncData) {
+          //           if (!asyncData.hasData) {
+          //             return CircularProgressIndicator.adaptive();
+          //           }
+          //           return CircleAvatar(
+          //             foregroundImage: NetworkImage(asyncData.data.toString()),
+          //             backgroundColor: Colors.grey[300],
+          //             child: rooms[i].avatar == null
+          //                 ? Icon(Icons.person, color: Colors.grey[600])
+          //                 : null,
+          //           );
+          //         })
+          //     :
+               SizedBox(),
           title: Row(
             children: [
               Expanded(
